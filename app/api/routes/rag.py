@@ -10,6 +10,8 @@ from app.rag.llm import generate_answer
 from opentelemetry import trace
 
 tracer = trace.get_tracer(__name__)
+router = APIRouter(prefix="/rag", tags=["rag"])
+
 
 @router.post("/query")
 async def query():
@@ -23,8 +25,6 @@ async def query():
             pass
 
         return {"ok": True}
-
-router = APIRouter(prefix="/rag", tags=["rag"])
 
 
 class RAGQuery(BaseModel):
