@@ -52,5 +52,13 @@ export async function streamQuery(
     }
   }
 
+  // Flush the decoder: emits any trailing multi-byte character that was
+  // split across the final chunk boundary.
+  const tail = decoder.decode();
+  if (tail) {
+    answer += tail;
+    onToken?.(tail);
+  }
+
   return answer.trim();
 }

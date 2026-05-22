@@ -6,11 +6,13 @@ lightweight (issue #25, maintainer guidance):
 
 * short-lived  -- entries expire after ``HISTORY_TTL_SECONDS``
 * bounded      -- at most ``MAX_HISTORY_PER_USER`` entries per user
-* best-effort  -- Redis failures never break the query path
+* best-effort  -- Redis failures (errors *or* slowness) never break, nor
+                  delay, the query path
 
 History is scoped per authenticated user under ``query_history:user:{user_id}``.
 """
 
+import asyncio
 import json
 import uuid
 from datetime import datetime, timezone
@@ -22,6 +24,9 @@ from app.core.redis_client import get_redis
 HISTORY_TTL_SECONDS = 3600
 # Keep only the most recent N queries per user.
 MAX_HISTORY_PER_USER = 20
+# Hard ceiling on any single Redis round-trip; a slower call is abandoned so
+# history can never stall the request it is attached to.
+HISTORY_OP_TIMEOUT_SECONDS = 2.0
 
 
 def _key(user_id: Any) -> str:
@@ -42,8 +47,9 @@ async def record_query(
 ) -> dict:
     """Persist one query record to Redis (newest-first) and return it.
 
-    Best-effort: any Redis error is swallowed so a history outage can never
-    fail an otherwise-successful RAG query.
+    Best-effort: any Redis error *or* a timeout is swallowed so a history
+    outage can never fail -- or slow down -- an otherwise-successful RAG query.
+    Callers typically dispatch this fire-and-forget.
     """
     record = {
         "id": uuid.uuid4().hex,
@@ -66,7 +72,7 @@ async def record_query(
         pipe.lpush(key, json.dumps(record))
         pipe.ltrim(key, 0, MAX_HISTORY_PER_USER - 1)
         pipe.expire(key, HISTORY_TTL_SECONDS)
-        await pipe.execute()
+        await asyncio.wait_for(pipe.execute(), timeout=HISTORY_OP_TIMEOUT_SECONDS)
     except Exception:  # pragma: no cover - history is observability-only
         # Intentionally silent: never let history break the query path.
         pass
@@ -77,12 +83,16 @@ async def record_query(
 async def get_history(user_id: Any, limit: int = MAX_HISTORY_PER_USER) -> list[dict]:
     """Return up to ``limit`` most-recent query records for ``user_id``.
 
-    Returns an empty list if Redis is unavailable or the user has no history.
+    Returns an empty list if Redis is unavailable, too slow, or the user has
+    no history.
     """
     limit = max(1, min(limit, MAX_HISTORY_PER_USER))
     try:
         redis = get_redis()
-        raw_entries = await redis.lrange(_key(user_id), 0, limit - 1)
+        raw_entries = await asyncio.wait_for(
+            redis.lrange(_key(user_id), 0, limit - 1),
+            timeout=HISTORY_OP_TIMEOUT_SECONDS,
+        )
     except Exception:  # pragma: no cover - history is observability-only
         return []
 

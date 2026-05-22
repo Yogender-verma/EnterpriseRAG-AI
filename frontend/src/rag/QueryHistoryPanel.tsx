@@ -58,7 +58,12 @@ export default function QueryHistoryPanel({
           onClick={() => setOpen((v) => !v)}
           aria-expanded={open}
         >
-          <span className={`qh-chevron ${open ? "open" : ""}`}>▸</span>
+          <span
+            className={`qh-chevron ${open ? "open" : ""}`}
+            aria-hidden="true"
+          >
+            ▸
+          </span>
           Query History ({entries.length})
         </button>
         <button
@@ -66,6 +71,7 @@ export default function QueryHistoryPanel({
           onClick={loadHistory}
           disabled={loading}
           title="Refresh history"
+          aria-label="Refresh history"
         >
           {loading ? "…" : "⟳"}
         </button>
@@ -87,7 +93,10 @@ export default function QueryHistoryPanel({
                   onClick={() => setExpandedId(expanded ? null : entry.id)}
                   aria-expanded={expanded}
                 >
-                  <span className={`qh-chevron ${expanded ? "open" : ""}`}>
+                  <span
+                    className={`qh-chevron ${expanded ? "open" : ""}`}
+                    aria-hidden="true"
+                  >
                     ▸
                   </span>
                   <span className="qh-query" title={entry.query}>

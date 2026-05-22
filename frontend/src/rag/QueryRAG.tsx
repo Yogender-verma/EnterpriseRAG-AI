@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import "../styles/pages/chat.css";
 import { streamQuery } from "../services/chatService";
 import QueryHistoryPanel from "./QueryHistoryPanel";
@@ -16,9 +16,13 @@ export default function QueryRAG() {
   const [loading, setLoading] = useState(false);
   // Bumped after each query so the history panel refetches.
   const [historyRefresh, setHistoryRefresh] = useState(0);
+  // Synchronous in-flight guard: `loading` state only updates on the next
+  // render, so a fast double-Enter/click could otherwise fire twice.
+  const inFlight = useRef(false);
 
   const handleAsk = async () => {
-    if (!query.trim() || loading) return;
+    if (!query.trim() || inFlight.current) return;
+    inFlight.current = true;
 
     const question = query.trim();
     setQuery("");
@@ -50,6 +54,7 @@ export default function QueryRAG() {
         { type: "ai", text: `⚠️ ${message}`, lens },
       ]);
     } finally {
+      inFlight.current = false;
       setLoading(false);
     }
   };
