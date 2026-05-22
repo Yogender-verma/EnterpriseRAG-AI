@@ -51,3 +51,4 @@ Please describe the validation/testing performed locally.
 docker compose up
 pytest
 npm run dev
+```
